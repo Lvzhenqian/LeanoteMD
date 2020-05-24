@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/mewbak/gopass"
 	"io/ioutil"
@@ -13,10 +14,17 @@ var (
 	UserName string
 	Password string
 	LeanoteUrl = "https://leanote.com"
+	UserId string
+	Token string
 )
+
+type querystring struct {
+	key string
+	value string
+} 
+
 func Login() (ApiResponse,error)  {
 	var ret ApiResponse
-	client := http.DefaultClient
 	url := fmt.Sprintf("%s/api/auth/login",LeanoteUrl)
 	req , err := http.NewRequest("GET",url,nil)
 	query := req.URL.Query()
@@ -26,9 +34,7 @@ func Login() (ApiResponse,error)  {
 	if err != nil{
 		return ApiResponse{},err
 	}
-	resp, _ := client.Do(req)
-	defer resp.Body.Close()
-	if body,ok:=ioutil.ReadAll(resp.Body);ok ==nil{
+	if body,ok:=httpClientDo(req);ok ==nil{
 		if err := json.Unmarshal(body,&ret);err != nil{
 			panic(err)
 		}
@@ -38,7 +44,6 @@ func Login() (ApiResponse,error)  {
 
 func Logout(token string) bool  {
 	var ret ApiResponse
-	client := http.DefaultClient
 	url := fmt.Sprintf("%s/api/auth/logout",LeanoteUrl)
 	req , err := http.NewRequest("GET",url,nil)
 	if err != nil{
@@ -47,9 +52,7 @@ func Logout(token string) bool  {
 	query := req.URL.Query()
 	query.Add("token",token)
 	req.URL.RawQuery = query.Encode()
-	resp, _ := client.Do(req)
-	defer resp.Body.Close()
-	if body,ok:=ioutil.ReadAll(resp.Body);ok ==nil{
+	if body,ok:=httpClientDo(req);ok ==nil{
 		if err := json.Unmarshal(body,&ret);err != nil{
 			panic(err)
 		}
@@ -57,33 +60,39 @@ func Logout(token string) bool  {
 	return ret.Ok
 }
 
-func AuthGetRequest(url,userid,token string) *http.Request {
-
+func AuthGetRequest(url string,q ...querystring) *http.Request {
 	req,ReqErr := http.NewRequest("GET",url,nil)
 	if ReqErr != nil{
 		panic(ReqErr)
 	}
 	query := req.URL.Query()
-	query.Add("userId",userid)
-	query.Add("token",token)
+	query.Add("userId",UserId)
+	query.Add("token",Token)
+	for _,v := range q{
+		query.Add(v.key,v.value)
+	}
 	req.URL.RawQuery = query.Encode()
 	return req
 }
 
-func GetAllNoteBook(userid,token string) []Notebook {
+func httpClientDo(req *http.Request) ([]byte, error) {
 	client := http.DefaultClient
+	resp,ReqErr := client.Do(req)
+	if ReqErr != nil{
+		return nil,ReqErr
+	}
+	defer resp.Body.Close()
+	return ioutil.ReadAll(resp.Body)
+}
+
+func GetAllNoteBook() []Notebook {
 	var (
 		errResp ApiResponse
 		noteBooks []Notebook
 	)
 	api := fmt.Sprintf("%s/api/notebook/getNotebooks",LeanoteUrl)
-	req := AuthGetRequest(api,userid,token)
-
-	resp,err:=client.Do(req)
-	if err != nil{
-		panic(err)
-	}
-	body, readErr := ioutil.ReadAll(resp.Body)
+	req := AuthGetRequest(api)
+	body, readErr := httpClientDo(req)
 	if readErr != nil{
 		panic(readErr)
 	}
@@ -93,35 +102,71 @@ func GetAllNoteBook(userid,token string) []Notebook {
 	return noteBooks
 }
 
-func ()  {
-
+func hasNote(notebookId string) ([]Note,bool) {
+	var (
+		noteList []Note
+		errResp ApiResponse
+	)
+	api := fmt.Sprintf("%s/api/note/getNotes",LeanoteUrl)
+	req := AuthGetRequest(api,querystring{
+		key:   "noteId",
+		value: notebookId,
+	})
+	
+	body,GetErr := httpClientDo(req)
+	if GetErr != nil{
+		panic(GetErr)
+	}
+	err:= json.Unmarshal(body,&noteList)
+	if err !=nil{
+		json.Unmarshal(body,&errResp)
+		log.Println(errResp.Msg)
+		return nil,false
+	}
+	return noteList,true
 }
 
-func BookList(books []Notebook) {
-	var root []Book
-	// root book
-	for _,v := range books{
-		flag := func(b Book,l []Book) bool {
-			for _,v := range l{
-				if b.ParentId == v.BookId
-			}
-		}
-		switch {
-		case v.ParentNotebookId == "":
-		case
-		}
+func GetNoteContent(noteId string) (Note,error) {
+	var (
+		n Note
+		errResp ApiResponse
+	)
 
-		if v.ParentNotebookId == ""{
-			root = append(root,Book{
-				BookId:   v.NotebookId,
-				Title:    v.Title,
-				ParentId: v.ParentNotebookId,
-				next:     nil,
-			})
-		}
+	api := fmt.Sprintf("%s/api/note/getNoteAndContent",LeanoteUrl)
+	req := AuthGetRequest(api,querystring{
+		key:   "noteId",
+		value: noteId,
+	})
+	body,GetErr :=httpClientDo(req)
+	if GetErr != nil{
+		panic(GetErr)
 	}
-	// middle book
-	for
+	if err :=json.Unmarshal(body,&n); err != nil{
+		json.Unmarshal(body,errResp)
+		log.Fatalln(errResp.Msg)
+	}
+	if n.IsTrash {
+		return Note{},errors.New("delete!!")
+	}
+	return n,nil
+}
+
+func GetImage(fileId string) ([]byte,error) {
+	api := fmt.Sprintf("%s/api/file/getImage",LeanoteUrl)
+	req := AuthGetRequest(api,querystring{
+		key:   "fileId",
+		value: fileId,
+	})
+	return httpClientDo(req)
+}
+
+func GetAttach(fileId string) ([]byte,error) {
+	api := fmt.Sprintf("%s/api/file/getAttach",LeanoteUrl)
+	req := AuthGetRequest(api,querystring{
+		key:   "fileId",
+		value: fileId,
+	})
+	return httpClientDo(req)
 }
 
 func main() {
@@ -146,7 +191,9 @@ func main() {
 	} else {
 		fmt.Printf("登陆成功 %s(%s)!\n",UserInfo.UserName,UserInfo.Email)
 	}
-	books := GetAllNoteBook(UserInfo.UserId,UserInfo.Token)
+	UserId = UserInfo.UserId
+	Token = UserInfo.Token
+	books := GetAllNoteBook()
 	for _,v := range books{
 		//if v.ParentNotebookId == ""{
 		//	t = append(t, NewSubBook(&v))

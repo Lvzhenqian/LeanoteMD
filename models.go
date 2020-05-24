@@ -57,11 +57,6 @@ type NoteFile struct {
 	IsAttach bool // 是否是附件, 不是附件就是图片
 }
 
-type NoteContent struct {
-	NoteId string
-	UserId string
-	Content string
-}
 
 
 
