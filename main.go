@@ -21,7 +21,7 @@ var (
 	LeanoteUrl = "https://leanote.com"
 	UserId     string
 	Token      string
-	DirRoot = "."
+	DirRoot    = "."
 )
 
 const UserAgent = `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/81.0.4044.138 Safari/537.36`
@@ -39,9 +39,9 @@ func httpClientDo(req *http.Request) ([]byte, error) {
 	if ReqErr != nil {
 		return nil, ReqErr
 	}
-	if resp.StatusCode != 200{
+	if resp.StatusCode != 200 {
 		log.Println(resp.StatusCode)
-		return nil,errors.New("Respones is not 200")
+		return nil, errors.New("Respones is not 200")
 	}
 	defer resp.Body.Close()
 	return ioutil.ReadAll(resp.Body)
@@ -55,7 +55,7 @@ func Login() (ApiResponse, error) {
 	query.Add("email", UserName)
 	query.Add("pwd", Password)
 	req.URL.RawQuery = query.Encode()
-	req.Header.Set("User-Agent",UserAgent)
+	req.Header.Set("User-Agent", UserAgent)
 	if err != nil {
 		return ApiResponse{}, err
 	}
@@ -67,7 +67,7 @@ func Login() (ApiResponse, error) {
 		}
 		return ret, nil
 	} else {
-		return ApiResponse{},ok
+		return ApiResponse{}, ok
 	}
 }
 
@@ -81,7 +81,7 @@ func Logout(token string) bool {
 	query := req.URL.Query()
 	query.Add("token", token)
 	req.URL.RawQuery = query.Encode()
-	req.Header.Set("User-Agent",UserAgent)
+	req.Header.Set("User-Agent", UserAgent)
 	if body, ok := httpClientDo(req); ok == nil {
 		if err := json.Unmarshal(body, &ret); err != nil {
 			panic(err)
@@ -98,15 +98,13 @@ func AuthGetRequest(url string, q ...querystring) *http.Request {
 	query := req.URL.Query()
 	query.Add("userId", UserId)
 	query.Add("token", Token)
-	req.Header.Set("User-Agent",UserAgent)
+	req.Header.Set("User-Agent", UserAgent)
 	for _, v := range q {
 		query.Add(v.key, v.value)
 	}
 	req.URL.RawQuery = query.Encode()
 	return req
 }
-
-
 
 func GetAllNoteBook() []Notebook {
 	var (
@@ -221,66 +219,64 @@ func MakeDirTrees(books []Notebook) []*Book {
 }
 
 func Write(b []byte, p string) error {
-	f,e:=os.OpenFile(p,os.O_TRUNC|os.O_CREATE|os.O_WRONLY,0755)
-	if e !=nil{
+	f, e := os.OpenFile(p, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0755)
+	if e != nil {
 		return e
 	}
-	_,wErr := f.Write(b)
+	_, wErr := f.Write(b)
 	return wErr
 }
 
-
-
 func Writefile(p string, n Note) error {
 	var (
-		abs string
-		content string
+		abs        string
+		content    string
 		attachPath string
-		)
-	if n.IsMarkdown{
-		abs = path.Join(p,n.Title+".md")
+	)
+	if n.IsMarkdown {
+		abs = path.Join(p, n.Title+".md")
 	} else {
-		abs = path.Join(p,n.Title+".txt")
+		abs = path.Join(p, n.Title+".txt")
 	}
-	if len(n.Files) > 0{
-		for _,v := range n.Files{
-			if v.IsAttach{
-				b,e := GetAttach(v.FileId)
-				if e != nil{
+	if len(n.Files) > 0 {
+		for _, v := range n.Files {
+			if v.IsAttach {
+				b, e := GetAttach(v.FileId)
+				if e != nil {
 					return e
 				}
-				attachPath = path.Join(p,"attach",v.FileId+v.Type)
-				Write(b,attachPath)
+				attachPath = path.Join(p, "attach", v.FileId+v.Type)
+				Write(b, attachPath)
 			} else {
-				b,e:=GetImage(v.FileId)
-				if e != nil{
+				b, e := GetImage(v.FileId)
+				if e != nil {
 					return e
 				}
-				rp:= path.Join(p,"images",v.FileId+v.Type)
-				Write(b,rp)
-				old := fmt.Sprintf("%s/api/file/getImage?fileId=%s",LeanoteUrl,v.FileId)
-				content = strings.ReplaceAll(n.Content,old,rp)
+				rp := path.Join(p, "images", v.FileId+v.Type)
+				Write(b, rp)
+				old := fmt.Sprintf("%s/api/file/getImage?fileId=%s", LeanoteUrl, v.FileId)
+				content = strings.ReplaceAll(n.Content, old, rp)
 			}
 		}
 	}
 
-	return Write([]byte(content),abs)
+	return Write([]byte(content), abs)
 }
 
-func GetNoteAndAll(bookID string,dirname string) error {
-	if notes,ok:=hasNote(bookID);ok {
-		for _,v := range notes{
-			note,e := GetNoteContent(v.NoteId)
-			if e != nil{
+func GetNoteAndAll(bookID string, dirname string) error {
+	if notes, ok := hasNote(bookID); ok {
+		for _, v := range notes {
+			note, e := GetNoteContent(v.NoteId)
+			if e != nil {
 				return e
 
 			}
 			// if is delete !
-			if  note.IsTrash{
+			if note.IsTrash {
 				continue
 			}
 
-			err:= Writefile(dirname,note)
+			err := Writefile(dirname, note)
 
 			if err != nil {
 				continue
@@ -290,23 +286,22 @@ func GetNoteAndAll(bookID string,dirname string) error {
 	return nil
 }
 
-func MakeDirs(parent string,books *Book) {
-	P := path.Join(parent,books.Title)
-	os.MkdirAll(P,0755)
-	GetNoteAndAll(books.Id,P)
-	if len(books.Child) >0{
+func MakeDirs(parent string, books *Book) {
+	P := path.Join(parent, books.Title)
+	os.MkdirAll(P, 0755)
+	GetNoteAndAll(books.Id, P)
+	if len(books.Child) > 0 {
 		for _, v := range books.Child {
-			MakeDirs(P,v)
+			MakeDirs(P, v)
 		}
 	}
 }
 
-
 func Exposes(notebooks []*Book) {
 	var wg sync.WaitGroup
-	for _,v := range notebooks{
+	for _, v := range notebooks {
 		wg.Add(1)
-		go MakeDirs(DirRoot,v)
+		go MakeDirs(DirRoot, v)
 		wg.Done()
 	}
 	wg.Wait()
