@@ -11,7 +11,6 @@ import (
 	"os"
 	"path"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -71,7 +70,7 @@ func Login() (ApiResponse, error) {
 	}
 }
 
-func Logout(token string) bool {
+func Logout(user *ApiResponse) bool {
 	var ret ApiResponse
 	url := fmt.Sprintf("%s/api/auth/logout", LeanoteUrl)
 	req, err := http.NewRequest("GET", url, nil)
@@ -79,7 +78,7 @@ func Logout(token string) bool {
 		return false
 	}
 	query := req.URL.Query()
-	query.Add("token", token)
+	query.Add("token", user.Token)
 	req.URL.RawQuery = query.Encode()
 	req.Header.Set("User-Agent", UserAgent)
 	if body, ok := httpClientDo(req); ok == nil {
@@ -87,7 +86,11 @@ func Logout(token string) bool {
 			panic(err)
 		}
 	}
-	return ret.Ok
+	if ret.Ok {
+		fmt.Printf("bye bye! %s\n", user.UserName)
+		return true
+	}
+	return false
 }
 
 func AuthGetRequest(url string, q ...querystring) *http.Request {
@@ -238,6 +241,7 @@ func Writefile(p string, n Note) error {
 	} else {
 		abs = path.Join(p, n.Title+".txt")
 	}
+	content = n.Content
 	if len(n.Files) > 0 {
 		for _, v := range n.Files {
 			if v.IsAttach {
@@ -245,17 +249,30 @@ func Writefile(p string, n Note) error {
 				if e != nil {
 					return e
 				}
-				attachPath = path.Join(p, "attach", v.FileId+v.Type)
+				attachdir:= path.Join(p,"attach")
+				os.MkdirAll(attachdir,0755)
+				filename := v.Title
+				if filename == "" {
+					filename = fmt.Sprintf("%s.%s",v.FileId,v.Type)
+				}
+				attachPath = path.Join(attachdir, filename)
 				Write(b, attachPath)
 			} else {
 				b, e := GetImage(v.FileId)
 				if e != nil {
 					return e
 				}
-				rp := path.Join(p, "images", v.FileId+v.Type)
+				imagedir := path.Join(p,"images")
+				os.MkdirAll(imagedir,0755)
+				filetype := v.Type
+				if filetype == ""{
+					filetype = ".png"
+				}
+				rp := path.Join(imagedir, v.FileId+filetype)
 				Write(b, rp)
 				old := fmt.Sprintf("%s/api/file/getImage?fileId=%s", LeanoteUrl, v.FileId)
-				content = strings.ReplaceAll(n.Content, old, rp)
+				shortPath := path.Join("images",v.FileId+filetype)
+				content = strings.ReplaceAll(content, old, shortPath)
 			}
 		}
 	}
@@ -279,6 +296,7 @@ func GetNoteAndAll(bookID string, dirname string) error {
 			err := Writefile(dirname, note)
 
 			if err != nil {
+				//log.Println(err)
 				continue
 			}
 		}
@@ -298,13 +316,9 @@ func MakeDirs(parent string, books *Book) {
 }
 
 func Exposes(notebooks []*Book) {
-	var wg sync.WaitGroup
 	for _, v := range notebooks {
-		wg.Add(1)
-		go MakeDirs(DirRoot, v)
-		wg.Done()
+		MakeDirs(DirRoot,v)
 	}
-	wg.Wait()
 }
 
 func main() {
@@ -330,6 +344,7 @@ func main() {
 	} else {
 		fmt.Printf("登陆成功 %s(%s)!\n", UserInfo.UserName, UserInfo.Email)
 	}
+	defer Logout(&UserInfo)
 	UserId = UserInfo.UserId
 	Token = UserInfo.Token
 	books := GetAllNoteBook()
@@ -342,8 +357,11 @@ func main() {
 		defer f.Close()
 		f.Write(b)
 	}
-	Exposes(dirTree)
-	if Logout(UserInfo.Token) {
-		fmt.Printf("bye bye! %s\n", UserInfo.UserName)
+	fmt.Printf("保存到[default(.)]:  ")
+	var p string
+	fmt.Scanln(&p)
+	if p != ""{
+		DirRoot = p
 	}
+	Exposes(dirTree)
 }
