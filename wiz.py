@@ -126,7 +126,6 @@ class Wiz:
         self.logger.debug(resp.text)
         return resp.json() if resp is not None else resp
 
-    # 获取当前所有目录
     def GetALlDirectory(self):
         url = f"{self.kbServer}/ks/category/all/{self.kbGuid}"
         self.logger.debug(f"Get All directory: {url}")
@@ -154,7 +153,6 @@ class Wiz:
         else:
             return None
 
-    # 导入一个markdown 笔记
     def LoadMarkdownWithImage(self,folder,title,MarkdownPath: str):
         note = self.__createNote(title,folder,'<html><head></head><body></body></html>')
         self.logger.debug(f"New note {note}")
@@ -162,9 +160,13 @@ class Wiz:
         base = os.path.dirname(MarkdownPath)
         contents = []
         resources = []
+        # contents.append("<html><head></head><body>")
         with open(MarkdownPath,mode="rt",encoding="utf8") as fd:
             for line in fd:
-                t = line.replace("\n","<br>",-1)
+                t = line\
+                    .replace("\n","<br>",-1)\
+                    .replace(" ","&nbsp;",-1)\
+                    .replace("\t","&nbsp;&nbsp;&nbsp;&nbsp;",-1)
                 i = self.__CheckLine(line=t)
                 if i is not None:
                     for r in i.split("<>"):
@@ -174,7 +176,7 @@ class Wiz:
                         resources.append(imagefile["name"])
                         t = t.replace(r,imagefile["url"])
                 contents.append(t)
-
+        # contents.append("</body></html>")
         # self.logger.debug(contents)
         if len(contents) >0:
             note["html"] = "".join(contents)
@@ -211,7 +213,7 @@ class Wiz:
                 self.__CreateFolder(pt,child)
         return
 
-    # 导入一个目录树
+
     def UpLoadDirectory(self,root: str):
 
         if os.path.isabs(root):
@@ -242,10 +244,46 @@ class Wiz:
             folder  = "/" + os.path.dirname(f) + "/"
             filename = os.path.basename(f)
             self.LoadMarkdownWithImage(folder=folder,title=filename,MarkdownPath=f)
-            
-    # 删除一个目录
+
     def DeleteDirs(self,folder):
         url  = f"{self.kbServer}/ks/category/delete/{self.kbGuid}{folder}"
+        return self.__execRequest("delete",url,body={})
+
+    def GetFoldernotes(self,folder):
+        "get /ks/note/list/category/:kbGuid?category=:folder&withAbstract=true|false&start=:start&count=:count&orderBy=title|created|modified&ascending=asc|desc"
+        url = f"{self.kbServer}/ks/note/list/category/{self.kbGuid}"
+        start = 0
+        count = 50
+        notes = list()
+        params = {
+            "category": folder,
+            "withAbstract": False,
+            "start": start,
+            "count": count,
+            "orderBy": "title",
+            "ascending": "asc"
+        }
+        while True:
+            subNotes = self.__execRequest("get",url,body={},params=params)
+            notes.extend(subNotes)
+            start += count
+            if len(subNotes) < count:
+                break
+        return notes
+
+    def GetNoteView(self,docGuid):
+        "get /ks/note/view/:kbGuid/:docGuid/"
+        url = f"{self.kbServer}/ks/note/view/{self.kbGuid}/{docGuid}"
+        return self.__execRequest("get",url,body={})
+
+    def GetAllTags(self):
+        "get /ks/tag/all/:kbGuid"
+        url = f"{self.kbServer}/ks/tag/all/{self.kbGuid}"
+        return self.__execRequest("get",url,body={})
+
+
+    def DeleteTag(self,TagGuid):
+        url = f"{self.kbServer}/ks/tag/delete/{self.kbGuid}/{TagGuid}"
         return self.__execRequest("delete",url,body={})
 
     def __enter__(self):
@@ -261,20 +299,34 @@ class Wiz:
 if __name__ == '__main__':
     username = input("username: ")
     password = getpass.getpass("password: ")
-    # folder = "/运维工作/故障处理记录/"
-    # title = "mail日志记录.md"
+    # folder = "/杂项/"
+    # title = "networkpolicy 网络策略.md"
     # mdPath = "/Users/charles/Downloads/ouput" + folder + title
-    # username = "xxxx"
-    # password = "xxxx"
-    root = "/Users/charles/Downloads/ouput/杂项"
+    # mdPath = "/Users/charles/Downloads/ouput" + "/运维工作/kubernetes/k8s学习/" +title
+    # username = ""
+    # password = ""
+    root = "/Users/charles/Downloads/ouput/运维工作"
     with Wiz(username,password) as w:
         w.logger.setLevel(logging.DEBUG)
 
         # w.DeleteDirs("运维工作/")
 
         # root = input("root: ")
-        w.UpLoadDirectory(root)
+        # w.UpLoadDirectory(root)
         # ret = w.GetALlDirectory()
         # pprint.pprint(ret)
         # print(mdPath)
         # note = w.LoadMarkdownWithImage(folder=folder,title=title,MarkdownPath=mdPath)
+        # print(note)
+        # notes = w.GetFoldernotes(folder)
+        # for i in notes:
+        #     if i["title"] == "test.md":
+        #         note = w.GetNoteView(i["docGuid"])
+        #
+        # pprint.pprint(note)
+
+        tags = w.GetAllTags()
+        # pprint.pprint(tags)
+        for tag in tags:
+            print(f'delete tag {tag["name"]}')
+            w.DeleteTag(tag["tagGuid"])
